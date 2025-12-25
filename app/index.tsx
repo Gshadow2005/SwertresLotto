@@ -6,13 +6,21 @@ import {
   ScrollView,
   RefreshControl,
   Platform,
-  TouchableOpacity
+  Alert,
+  Linking,
+  AppState,
+  AppStateStatus
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
+import * as BackgroundFetch from 'expo-background-fetch';
+import * as TaskManager from 'expo-task-manager';
 
 const STORAGE_KEY = '@swertres_results';
+const AUTO_START_ASKED_KEY = '@auto_start_asked';
+const BACKGROUND_FETCH_TASK = 'SWERTRES_BACKGROUND_FETCH';
 const IS_EXPO_GO = Constants.appOwnership === 'expo';
 
 interface DrawResult {
@@ -26,6 +34,55 @@ interface LottoResults {
   lastFetch: string;
 }
 
+// Configure notifications
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
+// Background fetch task definition
+TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
+  try {
+    const data = await fetchSwertresResults();
+    if (data) {
+      // Save to storage
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      
+      // Check for new results
+      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const oldData: LottoResults = JSON.parse(stored);
+        
+        for (let i = 0; i < data.results.length; i++) {
+          if (data.results[i].numbers !== oldData.results[i].numbers && 
+              data.results[i].numbers !== '_‑_‑_') {
+            // Send notification
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: '🎰 New Swertres Result!',
+                body: `${data.results[i].time}: ${data.results[i].numbers}`,
+                sound: true,
+              },
+              trigger: null,
+            });
+          }
+        }
+      }
+      
+      return BackgroundFetch.BackgroundFetchResult.NewData;
+    }
+    return BackgroundFetch.BackgroundFetchResult.NoData;
+  } catch (error) {
+    console.error('Background fetch error:', error);
+    return BackgroundFetch.BackgroundFetchResult.Failed;
+  }
+});
+
 // Web scraping function
 async function fetchSwertresResults(): Promise<LottoResults | null> {
   try {
@@ -33,16 +90,14 @@ async function fetchSwertresResults(): Promise<LottoResults | null> {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36'
       },
-      timeout: 10000 // 10 second timeout
+      timeout: 10000
     });
 
     const html = response.data;
     
-    // Extract date using regex
     const dateMatch = html.match(/SWERTRES RESULT[^<]*([A-Z][a-z]+ \d{1,2}, \d{4})/i);
     const date = dateMatch ? dateMatch[1] : 'Unknown Date';
 
-    // Extract table rows
     const tableMatch = html.match(/<table[^>]*>(.*?)<\/table>/is);
     if (!tableMatch) return null;
 
@@ -55,7 +110,7 @@ async function fetchSwertresResults(): Promise<LottoResults | null> {
     for (const rowMatch of rowMatches) {
       if (isFirstRow) {
         isFirstRow = false;
-        continue; // Skip header
+        continue;
       }
 
       const row = rowMatch[1];
@@ -71,7 +126,6 @@ async function fetchSwertresResults(): Promise<LottoResults | null> {
       }
     }
 
-    // Ensure we have 3 time slots
     const timeSlots = ['2:00 PM', '5:00 PM', '9:00 PM'];
     const formattedResults: DrawResult[] = timeSlots.map((slot) => {
       const existing = results.find(r => r.time.includes(slot.split(':')[0]));
@@ -93,44 +147,100 @@ export default function App() {
   const [results, setResults] = useState<LottoResults | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {
-    // Load cached results
-    loadCachedResults();
+    initializeApp();
 
-    // Initial fetch
-    fetchAndUpdate();
-
-    // Set up auto-refresh every 5 minutes (only when app is active)
-    let interval: NodeJS.Timeout | null = null;
-    
-    if (autoRefreshEnabled) {
-      interval = setInterval(() => {
-        const now = new Date();
-        const hour = now.getHours();
-        const minute = now.getMinutes();
-        
-        // More frequent checks around draw times: 2PM, 5PM, 9PM
-        const isDrawTime = (hour === 14 || hour === 17 || hour === 21) && minute < 10;
-        
-        if (isDrawTime) {
-          console.log('Auto-refreshing near draw time...');
-          fetchAndUpdate();
-        } else {
-          // Otherwise check every 30 minutes
-          if (minute % 30 === 0) {
-            console.log('Auto-refreshing...');
-            fetchAndUpdate();
-          }
-        }
-      }, 60000); // Check every minute
-    }
+    // Listen to app state changes
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
 
     return () => {
-      if (interval) clearInterval(interval);
+      subscription.remove();
     };
-  }, [autoRefreshEnabled]);
+  }, []);
+
+  const handleAppStateChange = (nextAppState: AppStateStatus) => {
+    if (appState.match(/inactive|background/) && nextAppState === 'active') {
+      // App has come to foreground, refresh data
+      fetchAndUpdate();
+    }
+    setAppState(nextAppState);
+  };
+
+  const initializeApp = async () => {
+    // Request notification permissions
+    if (!IS_EXPO_GO) {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Notifications Disabled',
+          'Enable notifications to receive alerts for new results.',
+          [{ text: 'OK' }]
+        );
+      }
+    }
+
+    // Ask for auto-start permission (one time)
+    await askAutoStartPermission();
+
+    // Register background fetch
+    if (!IS_EXPO_GO) {
+      await registerBackgroundFetch();
+    }
+
+    // Load cached results
+    await loadCachedResults();
+
+    // Initial fetch
+    await fetchAndUpdate();
+  };
+
+  const askAutoStartPermission = async () => {
+    try {
+      const hasAsked = await AsyncStorage.getItem(AUTO_START_ASKED_KEY);
+      
+      if (!hasAsked && Platform.OS === 'android') {
+        Alert.alert(
+          '🔄 Enable Auto-Start',
+          'Allow this app to run in the background to receive automatic updates for new lottery results.\n\nYou may need to enable this in your device settings.',
+          [
+            {
+              text: 'Open Settings',
+              onPress: () => {
+                Linking.openSettings();
+                AsyncStorage.setItem(AUTO_START_ASKED_KEY, 'true');
+              }
+            },
+            {
+              text: 'Maybe Later',
+              onPress: () => AsyncStorage.setItem(AUTO_START_ASKED_KEY, 'true'),
+              style: 'cancel'
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Auto-start permission error:', error);
+    }
+  };
+
+  const registerBackgroundFetch = async () => {
+    try {
+      const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_FETCH_TASK);
+      
+      if (!isRegistered) {
+        await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
+          minimumInterval: 15 * 60, // 15 minutes
+          stopOnTerminate: false,
+          startOnBoot: true,
+        });
+        console.log('Background fetch registered');
+      }
+    } catch (error) {
+      console.error('Background fetch registration error:', error);
+    }
+  };
 
   const loadCachedResults = async () => {
     try {
@@ -147,29 +257,34 @@ export default function App() {
     try {
       const data = await fetchSwertresResults();
       if (data) {
-        // Save to storage
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-        setResults(data);
-        
-        // Check for new results (simple version without notifications)
         const stored = await AsyncStorage.getItem(STORAGE_KEY);
+        let hasNewResults = false;
+        
         if (stored) {
           const oldData: LottoResults = JSON.parse(stored);
-          let hasNewResults = false;
           
           for (let i = 0; i < data.results.length; i++) {
             if (data.results[i].numbers !== oldData.results[i].numbers && 
                 data.results[i].numbers !== '_‑_‑_') {
               hasNewResults = true;
-              console.log(`New result: ${data.results[i].time} - ${data.results[i].numbers}`);
+              
+              // Send notification if app is in background
+              if (!IS_EXPO_GO && appState !== 'active') {
+                await Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: '🎰 New Swertres Result!',
+                    body: `${data.results[i].time}: ${data.results[i].numbers}`,
+                    sound: true,
+                  },
+                  trigger: null,
+                });
+              }
             }
           }
-          
-          if (hasNewResults && !IS_EXPO_GO) {
-            // Would show notification here in development build
-            console.log('New results available!');
-          }
         }
+        
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        setResults(data);
       }
     } catch (error) {
       console.error('Update error:', error);
@@ -188,17 +303,6 @@ export default function App() {
     return numbers === '_‑_‑_' ? '#666' : '#4CAF50';
   };
 
-  const clearCache = async () => {
-    try {
-      await AsyncStorage.removeItem(STORAGE_KEY);
-      setResults(null);
-      setLoading(true);
-      await fetchAndUpdate();
-    } catch (error) {
-      console.error('Clear cache error:', error);
-    }
-  };
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -207,7 +311,7 @@ export default function App() {
         {IS_EXPO_GO && (
           <View style={styles.expoGoBanner}>
             <Text style={styles.expoGoText}>
-              📱 Running in Expo Go (limited features)
+              📱 Running in Expo Go - Build as standalone app for full features
             </Text>
           </View>
         )}
@@ -252,47 +356,18 @@ export default function App() {
         ) : (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>Unable to load results</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
           </View>
         )}
 
-        <View style={styles.infoBox}>
-          <Text style={styles.infoTitle}>📅 Draw Times</Text>
-          <Text style={styles.infoText}>• 2:00 PM</Text>
-          <Text style={styles.infoText}>• 5:00 PM</Text>
-          <Text style={styles.infoText}>• 9:00 PM</Text>
-          <Text style={styles.infoNote}>
-            Pull down to refresh manually{'\n'}
-            {autoRefreshEnabled ? '✓ Auto-refresh enabled' : '✗ Auto-refresh disabled'}
-          </Text>
-        </View>
-
-        <View style={styles.controlsBox}>
-          <TouchableOpacity 
-            style={[styles.controlButton, autoRefreshEnabled && styles.controlButtonActive]} 
-            onPress={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
-          >
-            <Text style={styles.controlButtonText}>
-              {autoRefreshEnabled ? '🔄 Auto-Refresh ON' : '⏸ Auto-Refresh OFF'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.controlButton} 
-            onPress={clearCache}
-          >
-            <Text style={styles.controlButtonText}>🗑 Clear Cache</Text>
-          </TouchableOpacity>
-        </View>
-
         {!IS_EXPO_GO && (
           <View style={[styles.infoBox, { backgroundColor: '#1a3a1a' }]}>
-            <Text style={styles.infoTitle}>✨ Development Build Features</Text>
-            <Text style={styles.infoText}>• Push notifications for new results</Text>
-            <Text style={styles.infoText}>• Background fetch (even when app closed)</Text>
-            <Text style={styles.infoText}>• Better performance</Text>
+            <Text style={styles.infoTitle}>✨ Active Features</Text>
+            <Text style={styles.infoText}>• 🔔 Push notifications for new results</Text>
+            <Text style={styles.infoText}>• 🔄 Background updates (every 15 min)</Text>
+            <Text style={styles.infoText}>• 📱 Auto-start on device boot</Text>
+            <Text style={styles.infoNote}>
+              Pull down to refresh manually
+            </Text>
           </View>
         )}
       </ScrollView>
@@ -417,17 +492,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginBottom: 20,
   },
-  retryButton: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 25,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
   infoBox: {
     backgroundColor: '#16213e',
     borderRadius: 15,
@@ -453,29 +517,5 @@ const styles = StyleSheet.create({
     marginTop: 15,
     fontStyle: 'italic',
     lineHeight: 20,
-  },
-  controlsBox: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 20,
-  },
-  controlButton: {
-    flex: 1,
-    backgroundColor: '#16213e',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#0f3460',
-    alignItems: 'center',
-  },
-  controlButtonActive: {
-    borderColor: '#4CAF50',
-    backgroundColor: '#1a3a1a',
-  },
-  controlButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
   },
 });
