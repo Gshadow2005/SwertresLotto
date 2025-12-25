@@ -95,7 +95,7 @@ async function fetchSwertresResults(): Promise<LottoResults | null> {
 
     const html = response.data;
     
-    const dateMatch = html.match(/SWERTRES RESULT[^<]*([A-Z][a-z]+ \d{1,2}, \d{4})/i);
+    const dateMatch = html.match(/SWERTRES RESULT[^<]*?([A-Z][a-z]+(?:ber|ary|ch|il|ay|ne|ly|ust)?\s+\d{1,2},?\s+\d{4})/i);
     const date = dateMatch ? dateMatch[1] : 'Unknown Date';
 
     const tableMatch = html.match(/<table[^>]*>(.*?)<\/table>/is);
