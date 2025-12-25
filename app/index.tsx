@@ -308,13 +308,6 @@ export default function App() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>🎰 Swertres Lotto</Text>
         <Text style={styles.headerSubtitle}>3D Results</Text>
-        {IS_EXPO_GO && (
-          <View style={styles.expoGoBanner}>
-            <Text style={styles.expoGoText}>
-              📱 Running in Expo Go - Build as standalone app for full features
-            </Text>
-          </View>
-        )}
       </View>
 
       <ScrollView
@@ -330,8 +323,11 @@ export default function App() {
           </View>
         ) : results ? (
           <View style={styles.resultsContainer}>
+            <Text style={styles.titleText}>
+              Swertres (3D) Lotto Results
+            </Text>
             <Text style={styles.dateText}>
-              Swertres (3D) Lotto Results — {results.date}
+              {results.date}
             </Text>
             
             <View style={styles.resultsBox}>
@@ -400,18 +396,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 5,
   },
-  expoGoBanner: {
-    backgroundColor: '#ff6b35',
-    padding: 10,
-    borderRadius: 8,
-    marginTop: 10,
-  },
-  expoGoText: {
-    color: '#fff',
-    fontSize: 12,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
   scrollView: {
     flex: 1,
   },
@@ -430,11 +414,17 @@ const styles = StyleSheet.create({
   resultsContainer: {
     marginBottom: 30,
   },
+  titleText: {
+  fontSize: 18,
+  color: '#fff',
+  fontWeight: '600',
+  marginBottom: 8,
+},
   dateText: {
-    fontSize: 18,
-    color: '#fff',
+    fontSize: 16,
+    color: '#aaa',
     marginBottom: 20,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   resultsBox: {
     backgroundColor: '#16213e',
