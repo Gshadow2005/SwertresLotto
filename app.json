@@ -51,7 +51,8 @@
           }
         }
       ],
-      "expo-task-manager"
+      "expo-task-manager",
+      "./plugins/withAndroidWidget"
     ],
     "experiments": {
       "typedRoutes": true,
