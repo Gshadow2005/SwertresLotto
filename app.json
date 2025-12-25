@@ -10,6 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.gshad.swertreslotto",
       "infoPlist": {
         "UIBackgroundModes": [
           "fetch",
@@ -27,7 +28,7 @@
         "POST_NOTIFICATIONS",
         "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
       ],
-      "package": "com.yourcompany.swertreslotto"
+      "package": "com.gshad.swertreslotto"
     },
     "web": {
       "output": "static"
@@ -37,11 +38,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/notification-icon.png",
-          "color": "#4CAF50",
-          "sounds": [
-            "./assets/notification-sound.wav"
-          ]
+          "color": "#4CAF50"
         }
       ],
       [
@@ -52,19 +49,11 @@
           }
         }
       ],
-      [
-        "expo-task-manager",
-        {}
-      ]
+      "expo-task-manager"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    },
-    "extra": {
-      "eas": {
-        "projectId": "your-project-id"
-      }
     }
   }
 }

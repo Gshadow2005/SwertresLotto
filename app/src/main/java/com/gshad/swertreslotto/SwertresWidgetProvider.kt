@@ -1,4 +1,4 @@
-package com.yourcompany.swertreslotto
+package com.gshad.swertreslotto
 
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
