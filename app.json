@@ -26,7 +26,9 @@
         "WAKE_LOCK",
         "FOREGROUND_SERVICE",
         "POST_NOTIFICATIONS",
-        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.WAKE_LOCK"
       ],
       "package": "com.gshad.swertreslotto"
     },
@@ -54,6 +56,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1a1ecdfb-661e-4e1c-89fa-cd59a6c6622d"
+      }
     }
   }
 }
