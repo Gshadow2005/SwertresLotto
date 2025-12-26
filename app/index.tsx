@@ -369,18 +369,6 @@ export default function App() {
             <Text style={styles.errorText}>Unable to load results</Text>
           </View>
         )}
-
-        {!IS_EXPO_GO && (
-          <View style={[styles.infoBox, { backgroundColor: '#1a3a1a' }]}>
-            <Text style={styles.infoTitle}>✨ Active Features</Text>
-            <Text style={styles.infoText}>• 🔔 Push notifications for new results</Text>
-            <Text style={styles.infoText}>• 🔄 Background updates (every 15 min)</Text>
-            <Text style={styles.infoText}>• 📱 Auto-start on device boot</Text>
-            <Text style={styles.infoNote}>
-              Pull down to refresh manually
-            </Text>
-          </View>
-        )}
       </ScrollView>
     </View>
   );
@@ -496,31 +484,5 @@ const styles = StyleSheet.create({
     color: '#ff6b6b',
     fontSize: 18,
     marginBottom: 20,
-  },
-  infoBox: {
-    backgroundColor: '#16213e',
-    borderRadius: 15,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#0f3460',
-    marginBottom: 20,
-  },
-  infoTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  infoText: {
-    color: '#aaa',
-    fontSize: 16,
-    marginVertical: 4,
-  },
-  infoNote: {
-    color: '#666',
-    fontSize: 13,
-    marginTop: 15,
-    fontStyle: 'italic',
-    lineHeight: 20,
   },
 });
