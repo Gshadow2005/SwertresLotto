@@ -143,6 +143,20 @@ async function fetchSwertresResults(): Promise<LottoResults | null> {
   }
 }
 
+const updateWidget = async () => {
+  if (Platform.OS === 'android' && !IS_EXPO_GO) {
+    try {
+      // Send broadcast to update widget
+      const { NativeModules } = require('react-native');
+      if (NativeModules.WidgetUpdateModule) {
+        NativeModules.WidgetUpdateModule.updateWidget();
+      }
+    } catch (error) {
+      console.log('Widget update not available');
+    }
+  }
+};
+
 export default function App() {
   const [results, setResults] = useState<LottoResults | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -285,6 +299,7 @@ export default function App() {
         
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         setResults(data);
+        updateWidget();
       }
     } catch (error) {
       console.error('Update error:', error);

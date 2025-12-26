@@ -5,6 +5,11 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#16213e"
+    },
     "scheme": "swertreslotto",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -30,7 +35,11 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.WAKE_LOCK"
       ],
-      "package": "com.gshad.swertreslotto"
+      "package": "com.gshad.swertreslotto",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#16213e"
+      }
     },
     "web": {
       "output": "static"
@@ -40,6 +49,7 @@
       [
         "expo-notifications",
         {
+          "icon": "./assets/notification-bell.png",
           "color": "#4CAF50"
         }
       ],
