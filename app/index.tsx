@@ -34,7 +34,6 @@ interface LottoResults {
   lastFetch: string;
 }
 
-// Configure notifications
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -45,23 +44,36 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// Background fetch task definition
+function shouldFetchNow(): boolean {
+  const now = new Date();
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  
+  const timeWindows = [
+    { start: 14, end: 15 },
+    { start: 17, end: 18 },
+    { start: 21, end: 22 }
+  ];
+  
+  return timeWindows.some(window => hour === window.start || (hour === window.end && minute === 0));
+}
+
 TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
   try {
+    if (!shouldFetchNow()) {
+      return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
+
     const data = await fetchSwertresResults();
     if (data) {
-      // Save to storage
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      
-      // Check for new results
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      
       if (stored) {
         const oldData: LottoResults = JSON.parse(stored);
         
         for (let i = 0; i < data.results.length; i++) {
           if (data.results[i].numbers !== oldData.results[i].numbers && 
               data.results[i].numbers !== '_‑_‑_') {
-            // Send notification
             await Notifications.scheduleNotificationAsync({
               content: {
                 title: '🎰 New Swertres Result!',
@@ -74,6 +86,19 @@ TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
         }
       }
       
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      
+      if (Platform.OS === 'android' && !IS_EXPO_GO) {
+        try {
+          const { NativeModules } = require('react-native');
+          if (NativeModules.WidgetUpdateModule) {
+            NativeModules.WidgetUpdateModule.updateWidget();
+          }
+        } catch (error) {
+          console.log('Widget update not available');
+        }
+      }
+      
       return BackgroundFetch.BackgroundFetchResult.NewData;
     }
     return BackgroundFetch.BackgroundFetchResult.NoData;
@@ -83,7 +108,6 @@ TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
   }
 });
 
-// Web scraping function
 async function fetchSwertresResults(): Promise<LottoResults | null> {
   try {
     const response = await axios.get('https://philnews.ph/pcso-lotto-result/swertres-result/', {
@@ -146,7 +170,6 @@ async function fetchSwertresResults(): Promise<LottoResults | null> {
 const updateWidget = async () => {
   if (Platform.OS === 'android' && !IS_EXPO_GO) {
     try {
-      // Send broadcast to update widget
       const { NativeModules } = require('react-native');
       if (NativeModules.WidgetUpdateModule) {
         NativeModules.WidgetUpdateModule.updateWidget();
@@ -166,7 +189,6 @@ export default function App() {
   useEffect(() => {
     initializeApp();
 
-    // Listen to app state changes
     const subscription = AppState.addEventListener('change', handleAppStateChange);
 
     return () => {
@@ -176,14 +198,12 @@ export default function App() {
 
   const handleAppStateChange = (nextAppState: AppStateStatus) => {
     if (appState.match(/inactive|background/) && nextAppState === 'active') {
-      // App has come to foreground, refresh data
       fetchAndUpdate();
     }
     setAppState(nextAppState);
   };
 
   const initializeApp = async () => {
-    // Request notification permissions
     if (!IS_EXPO_GO) {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') {
@@ -195,18 +215,14 @@ export default function App() {
       }
     }
 
-    // Ask for auto-start permission (one time)
     await askAutoStartPermission();
 
-    // Register background fetch
     if (!IS_EXPO_GO) {
       await registerBackgroundFetch();
     }
 
-    // Load cached results
     await loadCachedResults();
 
-    // Initial fetch
     await fetchAndUpdate();
   };
 
@@ -245,7 +261,7 @@ export default function App() {
       
       if (!isRegistered) {
         await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
-          minimumInterval: 15 * 60, // 15 minutes
+          minimumInterval: 10 * 60,
           stopOnTerminate: false,
           startOnBoot: true,
         });
@@ -282,7 +298,6 @@ export default function App() {
                 data.results[i].numbers !== '_‑_‑_') {
               hasNewResults = true;
               
-              // Send notification if app is in background
               if (!IS_EXPO_GO && appState !== 'active') {
                 await Notifications.scheduleNotificationAsync({
                   content: {
